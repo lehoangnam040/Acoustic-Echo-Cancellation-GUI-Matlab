@@ -22,7 +22,7 @@ function varargout = AEC(varargin)
 
 % Edit the above text to modify the response to help AEC
 
-% Last Modified by GUIDE v2.5 14-Nov-2019 17:35:44
+% Last Modified by GUIDE v2.5 15-Nov-2019 06:34:44
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -78,6 +78,10 @@ handles.echoCanceller    = dsp.FrequencyDomainAdaptiveFilter('Length', 2048, ...
                     'BlockLength', handles.frameSize, ... % Set the block length to frameSize
                     'Method', 'Partitioned constrained FDAF');  %'Unconstrained FDAF');
 handles.recObj = audiorecorder(handles.fs, 16 , 1, -1);
+
+set(handles.btnSwitchspeaker, 'Enable', 'off');
+set(handles.btnStoprecord, 'Enable', 'off');
+
 % Update handles structure
 guidata(hObject, handles);
 
@@ -172,14 +176,16 @@ resultSink = dsp.SignalSink;
 
 % Stream processing loop - adaptive filter step size = 0.025
 while(~isDone(micSrc))
-    farSpeech = farSpeechEchoSrc();
+    farSpeech = farSpeechSrc();
     micS = micSrc();
     % Apply FDAF
     [y, e] = handles.echoCanceller(farSpeech, micS);
     resultSink(e);
 end
 handles.result = resultSink.Buffer;
-plot(handles.axesResult, handles.result);
+dt = 1/handles.fs;
+time_axis = (0:dt:(length(handles.result)*dt)-dt)';
+plot(handles.axesResult, time_axis, handles.result);
 guidata(hObject, handles);
 
 % --- Executes on button press in btnSoundResult.
@@ -199,29 +205,31 @@ function btnRoomecho_Callback(hObject, eventdata, handles)
 FVT = fvtool(handles.impulseResponseGenerator);  % Analyze the filter
 FVT.Color = [1 1 1];
 fig = figure;
-plot(0:1/handles.fs:0.5, handles.roomImpulseResponse);
+plot(0:1/(handles.fs*2):0.5, handles.roomImpulseResponse);
 xlabel('Time (s)');
 ylabel('Amplitude');
 title('Room Impulse Response');
 fig.Color = [1 1 1];
 
 
-% --- Executes on button press in btnRecordfar.
-function btnRecordfar_Callback(hObject, eventdata, handles)
-% hObject    handle to btnRecordfar (see GCBO)
+% --- Executes on button press in btnRecord.
+function btnRecord_Callback(hObject, eventdata, handles)
+% hObject    handle to btnRecord (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 handles.signal_frames = {};
 record(handles.recObj);
+set(handles.btnSwitchspeaker, 'Enable', 'on'); 
+set(handles.btnRecord, 'Enable', 'off');
+set(handles.txtNoti, 'String', 'Start recording: Voice of person who make the call');
 guidata(hObject, handles);
-disp('Start recording');
 
 % --- Executes on button press in btnStoprecord.
 function btnStoprecord_Callback(hObject, eventdata, handles)
 % hObject    handle to btnStoprecord (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-disp('end');
+set(handles.txtNoti, 'String', 'End of conversation');
 stop(handles.recObj);
 handles.signal_frames{end + 1} = getaudiodata(handles.recObj);
 L = length(handles.signal_frames);
@@ -229,21 +237,26 @@ handles.nearspeech = [];
 handles.farspeech = [];
 
 for i = 1:L
-    if mod(i, 2) == 1
+    if mod(i, 2) == 0
         handles.nearspeech = cat(1, handles.nearspeech, handles.signal_frames{i});
         handles.farspeech = cat(1, handles.farspeech, zeros(length(handles.signal_frames{i}), 1));
     else
-        handles.farspeech = cat(1, handles.farspeech, handles.signal_frames{i});
+        handles.farspeech = cat(1, handles.farspeech, handles.signal_frames{i}.*0.2);
         handles.nearspeech = cat(1, handles.nearspeech, zeros(length(handles.signal_frames{i}), 1));
     end
 end
 handles.echo_farspeech = handles.room(handles.farspeech);
 handles.farend_len = length(handles.echo_farspeech);
-handles.nearend_len = length(handles.nearspeech);
+% handles.nearend_len = length(handles.nearspeech);
 handles.micSignal = handles.nearspeech + handles.echo_farspeech + 0.001*randn(handles.farend_len ,1);
-plot(handles.axesMic, handles.micSignal);
-plot(handles.axesFarend, handles.echo_farspeech);
-plot(handles.axesNearend, handles.nearspeech)
+dt = 1/handles.fs;
+time_axis = (0:dt:(handles.farend_len*dt)-dt)';
+plot(handles.axesMic, time_axis, handles.micSignal);
+plot(handles.axesFarend, time_axis, handles.echo_farspeech);
+plot(handles.axesNearend, time_axis, handles.nearspeech);
+set(handles.btnSwitchspeaker, 'Enable', 'off');
+set(handles.btnStoprecord, 'Enable', 'off');
+set(handles.btnRecord, 'Enable', 'on');
 guidata(hObject, handles);
 
 % --- Executes on button press in btnSwitchspeaker.
@@ -251,8 +264,16 @@ function btnSwitchspeaker_Callback(hObject, eventdata, handles)
 % hObject    handle to btnSwitchspeaker (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-disp('switch');
 stop(handles.recObj);
 handles.signal_frames{end + 1} = getaudiodata(handles.recObj);
 record(handles.recObj);
+set(handles.btnStoprecord, 'Enable', 'on');
+str = get(handles.txtNoti, 'String');
+if strcmp(str, 'Start recording: Voice of person who make the call')
+    set(handles.txtNoti, 'String', 'Switch speaker: Voice of person on the other side');
+elseif strcmp(str, 'Switch speaker: Voice of person who make the call')
+    set(handles.txtNoti, 'String', 'Switch speaker: Voice of person on the other side');
+elseif strcmp(str, 'Switch speaker: Voice of person on the other side')
+    set(handles.txtNoti, 'String', 'Switch speaker: Voice of person who make the call');
+end
 guidata(hObject, handles);
