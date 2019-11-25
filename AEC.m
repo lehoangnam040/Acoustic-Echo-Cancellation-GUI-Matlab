@@ -267,13 +267,14 @@ function btnSwitchspeaker_Callback(hObject, eventdata, handles)
 stop(handles.recObj);
 handles.signal_frames{end + 1} = getaudiodata(handles.recObj);
 record(handles.recObj);
-set(handles.btnStoprecord, 'Enable', 'on');
+
 str = get(handles.txtNoti, 'String');
 if strcmp(str, 'Start recording: Voice of person who make the call')
     set(handles.txtNoti, 'String', 'Switch speaker: Voice of person on the other side');
 elseif strcmp(str, 'Switch speaker: Voice of person who make the call')
     set(handles.txtNoti, 'String', 'Switch speaker: Voice of person on the other side');
 elseif strcmp(str, 'Switch speaker: Voice of person on the other side')
+    set(handles.btnStoprecord, 'Enable', 'on');
     set(handles.txtNoti, 'String', 'Switch speaker: Voice of person who make the call');
 end
 guidata(hObject, handles);
